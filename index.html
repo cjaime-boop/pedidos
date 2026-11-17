@@ -121,6 +121,11 @@ footer .cta{padding:12px 18px;font-size:16px}
 .instalar div b{display:block;color:var(--ink);font-size:16px}
 .instalar .cta{padding:10px 16px;font-size:15px}
 .instalar .x{all:unset;cursor:pointer;color:var(--muted);font-size:18px;padding:4px 6px}
+#cuadrillas{display:flex;flex-direction:column;gap:14px}
+.proys{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.proy{border:2px solid var(--line);background:var(--panel);color:var(--ink);border-radius:12px;padding:16px 8px;font:700 18px var(--f-body);cursor:pointer}
+.proy[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.proy:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
 
@@ -141,9 +146,9 @@ footer .cta{padding:12px 18px;font-size:16px}
     <section id="p1">
       <div style="display:flex;flex-direction:column;gap:14px">
         <div id="inst"></div>
-        <h2>Cuadrilla</h2>
-        <div class="alerta mal" id="faltaC" hidden>⚠ Primero tocá tu nombre.</div>
-        <div class="chips" id="cuadrillas"></div>
+        <h2>Proyecto y cuadrilla</h2>
+        <div class="alerta mal" id="faltaC" hidden>⚠ Primero elegí el proyecto y tocá tu nombre.</div>
+        <div id="cuadrillas"></div>
         <label class="campo" for="fecha">Fecha<input type="date" id="fecha"></label>
       </div>
     </section>
@@ -196,7 +201,10 @@ footer .cta{padding:12px 18px;font-size:16px}
 
 <script>
 // Las cuadrillas del formulario "Control Materiales MTTO ATC"
-var CUADRILLAS = ["Diego D' Olivo","Cristian Penayo","Diego Penayo","Gustavo Blanco","Brian Soria","Hugo Romero","Nicolas Villafañe","Jonathan Mendoza","Victor Alderete","Sebastian Rojas","Sergio Godoy"];
+var GRUPOS_C = [
+  {n:"Lineales", c:["Diego D' Olivo","Cristian Penayo","Diego Penayo","Gustavo Blanco","Brian Soria","Hugo Romero","Sergio Godoy"]},
+  {n:"GPON", c:["Nicolas Villafañe","Jonathan Mendoza","Victor Alderete","Sebastian Rojas"]}];
+var CUADRILLAS = [].concat.apply([], GRUPOS_C.map(function(g){ return g.c; }));
 var MODO_PRUEBA = true;   // en prueba no se manda nada al formulario del depósito
 // Los campos del formulario "Control Materiales MTTO ATC"
 var FIBRA = [
@@ -210,6 +218,7 @@ var EQUIPOS = [
 var TIPOS_RECORTE = ["48","72","72 anti roedor","144","Drop"];
 var st = {paso:1, cuadrilla:null, fecha:hoyISO(), cant:{}, items:[], recortes:[], ok:false};
 try { var c = localStorage.getItem("pedido_cuadrilla"); if (c && CUADRILLAS.indexOf(c) >= 0) st.cuadrilla = c; } catch(e){}
+st.proy = st.cuadrilla ? GRUPOS_C.filter(function(g){ return g.c.indexOf(st.cuadrilla) >= 0; })[0].n : null;
 
 function hoyISO(){ var d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,10); }
 function $(id){ return document.getElementById(id); }
@@ -220,8 +229,13 @@ function itemsOk(){ return st.items.map(function(s){return s.trim();}).filter(Bo
 function recortesOk(){ return st.recortes.filter(function(r){return r.m;}); }
 
 function pintarCuadrillas(){
-  $("cuadrillas").innerHTML = CUADRILLAS.map(function(n){
-    return '<button class="chip" aria-pressed="'+(n===st.cuadrilla)+'" data-c="'+esc(n)+'">'+esc(n)+'</button>'; }).join("");
+  var h = '<div class="proys">' + GRUPOS_C.map(function(g){
+    return '<button class="proy" aria-pressed="'+(g.n===st.proy)+'" data-proy="'+g.n+'">'+g.n+'</button>'; }).join("") + '</div>';
+  var g = GRUPOS_C.filter(function(x){ return x.n===st.proy; })[0];
+  if (g) h += '<div class="chips">' + g.c.map(function(n){
+      return '<button class="chip" aria-pressed="'+(n===st.cuadrilla)+'" data-c="'+esc(n)+'">'+esc(n)+'</button>'; }).join("") + '</div>';
+  else h += '<div class="vacio" style="padding:0">Elegí tu proyecto para ver las cuadrillas.</div>';
+  $("cuadrillas").innerHTML = h;
 }
 function filaHTML(it){
   var v = st.cant[it.id] || 0;
@@ -363,6 +377,7 @@ function copiar(){
 document.addEventListener("click", function(e){
   var b = e.target.closest("button,a"); if (!b) return;
   if (b.dataset.p) return irA(+b.dataset.p);
+  if (b.dataset.proy){ if (st.proy !== b.dataset.proy){ st.proy = b.dataset.proy; st.cuadrilla = null; st.ok = false; } pintarCuadrillas(); pintarTotal(); return; }
   if (b.dataset.c){ st.cuadrilla = b.dataset.c; st.ok=false; try{ localStorage.setItem("pedido_cuadrilla", st.cuadrilla); }catch(_){} $("faltaC").hidden = true; pintarCuadrillas(); pintarTotal(); return; }
   if (b.dataset.mas) return setCant(b.dataset.mas, (st.cant[b.dataset.mas]||0) + paso(b.dataset.mas));
   if (b.dataset.menos) return setCant(b.dataset.menos, (st.cant[b.dataset.menos]||0) - paso(b.dataset.menos));
