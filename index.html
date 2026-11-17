@@ -133,7 +133,7 @@ footer .cta{padding:12px 18px;font-size:16px}
 <body>
 <div class="app">
   <header class="pad">
-    <div class="top"><h1>Pedido de materiales</h1><span class="prueba">Maqueta</span></div>
+    <div class="top"><h1>Pedido de materiales</h1><span class="prueba" id="badge" hidden>Prueba</span></div>
     <nav class="pasos" role="tablist" aria-label="Pasos">
       <button role="tab" id="t1" aria-selected="true" data-p="1">1 · Quién</button>
       <button role="tab" id="t2" aria-selected="false" data-p="2">2 · Materiales</button>
@@ -180,7 +180,7 @@ footer .cta{padding:12px 18px;font-size:16px}
     <!-- LISTO -->
     <section id="p4" hidden>
       <div style="display:flex;flex-direction:column;gap:14px">
-        <div class="hecho"><b>Pedido cargado en el formulario</b><span id="hechoSub"></span></div>
+        <div class="hecho" id="hecho"><b>Pedido cargado en el formulario</b><span id="hechoSub"></span></div>
         <h2>Ahora pegalo en el grupo del depósito</h2>
         <pre class="msg" id="msg"></pre>
         <div class="acciones">
@@ -205,7 +205,15 @@ var GRUPOS_C = [
   {n:"Lineales", c:["Diego D' Olivo","Cristian Penayo","Diego Penayo","Gustavo Blanco","Brian Soria","Hugo Romero","Sergio Godoy"]},
   {n:"GPON", c:["Nicolas Villafañe","Jonathan Mendoza","Victor Alderete","Sebastian Rojas"]}];
 var CUADRILLAS = [].concat.apply([], GRUPOS_C.map(function(g){ return g.c; }));
-var MODO_PRUEBA = true;   // en prueba no se manda nada al formulario del depósito
+// Con ?prueba en el link no se manda nada al formulario (para probar sin ensuciarle los datos al depósito)
+var MODO_PRUEBA = /[?&]prueba\b/.test(location.search);
+// Formulario "Control Materiales MTTO ATC": a dónde se manda y el código de cada pregunta
+var FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdO3_aLGX9wbnyPf-m9VTDYwNyR2V_IuxvByk2tqokeMsd9Fw/formResponse";
+var ENTRY = {cuadrilla:1989486484, fecha:1649473563, b48:1429520236, b72:1237671074, f48:240696656, f72:878864700,
+             f48r:164726311, f72r:593271814, f144:1771794181, drop:1346776007, cto:936967685, s2:2110611759,
+             s8:1854734769, s16:1545006106, consumibles:2006634554,
+             recortes:[[722430054,1902162181],[1460644450,1710323657],[1025676968,785067395]]};
+var TIPO_FORM = {"48":"48","72":"72","72 anti roedor":"72 ANTI ROEDOR","144":"144","Drop":"DROP"};
 // Los campos del formulario "Control Materiales MTTO ATC"
 var FIBRA = [
   {id:"f48",n:"Fibra 48",u:"m",paso:50},{id:"f72",n:"Fibra 72",u:"m",paso:50},
@@ -310,30 +318,44 @@ function mensaje(){
   var rec = recortesOk(); if (rec.length){ m.push("*Recortes que entrego:*", ""); rec.forEach(function(r){ m.push("• Fibra "+r.tipo+": "+r.m+" m"); }); }
   return m.join("\n").trim();
 }
-function camposFormulario(){   // lo que se cargaría en cada pregunta del formulario
-  var f = {"CUADRILLA": st.cuadrilla, "FECHA": st.fecha};
-  todos().forEach(function(it){ if (st.cant[it.id]) f[it.n.replace(/ \(.*\)/,"").toUpperCase()] = String(st.cant[it.id]); });
-  recortesOk().slice(0,3).forEach(function(r,i){ f["RECORTE "+(i+1)] = r.tipo.toUpperCase()+" · "+r.m; });
-  if (itemsOk().length) f["PEDIDO CONSUMIBLES"] = itemsOk().join("\n");
-  return f;
+function datosFormulario(){   // lo que se carga en cada pregunta del formulario
+  var p = new URLSearchParams(), e = function(id){ return "entry." + id; };
+  p.append(e(ENTRY.cuadrilla), st.cuadrilla);
+  var f = st.fecha.split("-");
+  p.append(e(ENTRY.fecha) + "_year", f[0]); p.append(e(ENTRY.fecha) + "_month", String(+f[1])); p.append(e(ENTRY.fecha) + "_day", String(+f[2]));
+  todos().forEach(function(it){ if (st.cant[it.id]) p.append(e(ENTRY[it.id]), String(st.cant[it.id])); });
+  recortesOk().slice(0,3).forEach(function(r,i){
+    p.append(e(ENTRY.recortes[i][0]), TIPO_FORM[r.tipo] || r.tipo); p.append(e(ENTRY.recortes[i][1]), String(r.m)); });
+  if (itemsOk().length) p.append(e(ENTRY.consumibles), itemsOk().join("\n"));
+  p.append("fvv", "1"); p.append("pageHistory", "0");
+  return p;
 }
+var enviando = false;
 function enviar(){
   var b = $("enviar");
+  if (enviando) return;
   if (b.dataset.vacio) { $("estado").textContent = "No se puede mandar un pedido vacío."; return; }
   if (!$("confirmo").checked) { $("estado").textContent = "Marcá “Revisé el pedido y está bien” para poder mandarlo."; return; }
-  b.textContent = "Enviando…";
-  setTimeout(function(){           // en prueba no se manda: solo se simula
-    if (!MODO_PRUEBA) { /* acá va el envío real al formulario */ }
-    console.log("[prueba] formulario:", camposFormulario());
-    b.textContent = "Confirmar y enviar al depósito";
+  if (!navigator.onLine) { $("estado").textContent = "No hay señal. Probá de nuevo cuando tengas internet."; return; }
+  enviando = true; b.textContent = "Enviando…"; $("estado").textContent = "";
+  var datos = datosFormulario();
+  var envio = MODO_PRUEBA
+    ? new Promise(function(ok){ console.log("[prueba] no se manda:", datos.toString()); setTimeout(ok, 700); })
+    : fetch(FORM_URL, {method: "POST", mode: "no-cors", body: datos});
+  envio.then(function(){
+    enviando = false; b.textContent = "Confirmar y enviar al depósito";
     st.ok = true; irA(4);
-  }, 700);
+  }, function(){
+    enviando = false; b.textContent = "Confirmar y enviar al depósito";
+    $("estado").textContent = "No se pudo mandar (¿sin señal?). Tocá de nuevo para reintentar.";
+  });
 }
 function pintarListo(){
   var t = mensaje();
   $("msg").textContent = t;
   $("wa").href = "https://wa.me/?text=" + encodeURIComponent(t);
-  $("hechoSub").textContent = MODO_PRUEBA ? "Maqueta: no está conectada a ningún formulario." : "El depósito ya lo tiene en el formulario.";
+  $("hechoSub").textContent = MODO_PRUEBA ? "Modo prueba: no se mandó nada al depósito." : "El depósito ya lo tiene en el formulario.";
+  $("hecho").firstElementChild.textContent = MODO_PRUEBA ? "Prueba terminada" : "Pedido cargado en el formulario";
   $("estado2").textContent = "";
 }
 
@@ -433,6 +455,7 @@ function ofrecerInstalar(){
 }
 ofrecerInstalar();
 if ("serviceWorker" in navigator) { try { navigator.serviceWorker.register("sw.js").catch(function(){}); } catch(_){} }
+$("badge").hidden = !MODO_PRUEBA;
 $("fecha").value = st.fecha;
 pintarCuadrillas(); pintarTotal();
 </script>
