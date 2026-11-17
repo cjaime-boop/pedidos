@@ -289,11 +289,11 @@ function pintarRevision(){
 
 // ---- mensaje y formulario
 function mensaje(){
-  var m = ["*Pedido de materiales*", "Cuadrilla: "+st.cuadrilla, "Fecha: "+fechaLinda(st.fecha), ""];
+  var m = ["*Pedido de materiales*", "", "Cuadrilla: "+st.cuadrilla, "", "Fecha: "+fechaLinda(st.fecha), ""];
   var mat = todos().filter(function(it){return st.cant[it.id];});
-  if (mat.length){ m.push("*Materiales*"); mat.forEach(function(it){ m.push("• "+it.n+": "+cant(it)); }); m.push(""); }
-  var its = itemsOk(); if (its.length){ m.push("*Consumibles*"); its.forEach(function(s){ m.push("• "+s); }); m.push(""); }
-  var rec = recortesOk(); if (rec.length){ m.push("*Recortes que entrego*"); rec.forEach(function(r){ m.push("• Fibra "+r.tipo+": "+r.m+" m"); }); }
+  if (mat.length){ m.push("*Materiales:*", ""); mat.forEach(function(it){ m.push("• "+it.n+": "+cant(it)); }); m.push(""); }
+  var its = itemsOk(); if (its.length){ m.push("*Consumibles:*", ""); its.forEach(function(s){ m.push("• "+s); }); m.push(""); }
+  var rec = recortesOk(); if (rec.length){ m.push("*Recortes que entrego:*", ""); rec.forEach(function(r){ m.push("• Fibra "+r.tipo+": "+r.m+" m"); }); }
   return m.join("\n").trim();
 }
 function camposFormulario(){   // lo que se cargaría en cada pregunta del formulario
