@@ -126,6 +126,19 @@ footer .cta{padding:12px 18px;font-size:16px}
 .proy{border:2px solid var(--line);background:var(--panel);color:var(--ink);border-radius:12px;padding:16px 8px;font:700 18px var(--f-body);cursor:pointer}
 .proy[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
 .proy:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.top{flex-wrap:wrap}
+.mis{margin-left:auto;border:1px solid rgba(255,255,255,.45);background:transparent;color:var(--head-ink);border-radius:999px;padding:6px 12px;font:600 14px var(--f-body);cursor:pointer;white-space:nowrap}
+.mis:focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
+#hist{display:flex;flex-direction:column;gap:12px}
+.ped{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.ped .cab{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.ped .cab b{font-size:16px}.ped .cab span{color:var(--muted);font-size:13px;text-align:right}
+.ped .res{font-size:14px;color:var(--ink)}
+.ped .bts{display:flex;gap:8px;flex-wrap:wrap}
+.ped .bts button{flex:1;min-width:120px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:10px;padding:10px;font:600 14px var(--f-body);cursor:pointer}
+.ped pre.msg{font-size:13px}
+.tagp{font-size:11px;font-weight:700;background:var(--cyan);color:#06202c;border-radius:999px;padding:1px 7px;margin-left:6px}
+.nota{color:var(--muted);font-size:13px;margin:0}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
 
@@ -133,7 +146,7 @@ footer .cta{padding:12px 18px;font-size:16px}
 <body>
 <div class="app">
   <header class="pad">
-    <div class="top"><h1>Pedido de materiales</h1><span class="prueba" id="badge" hidden>Prueba</span></div>
+    <div class="top"><h1>Pedido de materiales</h1><span class="prueba" id="badge" hidden>Prueba</span><button class="mis" id="bMis" type="button">📋 Mis pedidos</button></div>
     <nav class="pasos" role="tablist" aria-label="Pasos">
       <button role="tab" id="t1" aria-selected="true" data-p="1">1 · Quién</button>
       <button role="tab" id="t2" aria-selected="false" data-p="2">2 · Materiales</button>
@@ -189,6 +202,16 @@ footer .cta{padding:12px 18px;font-size:16px}
           <div class="estado" id="estado2"></div>
           <button class="cta sec" id="nuevo">Hacer otro pedido</button>
         </div>
+      </div>
+    </section>
+
+    <!-- MIS PEDIDOS -->
+    <section id="p5" hidden>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <h2>Mis pedidos</h2>
+        <div id="hist"></div>
+        <p class="nota">Se guardan en este celular (los últimos 30).</p>
+        <button class="cta sec" id="volver">Volver al pedido</button>
       </div>
     </section>
   </main>
@@ -344,12 +367,44 @@ function enviar(){
     : fetch(FORM_URL, {method: "POST", mode: "no-cors", body: datos});
   envio.then(function(){
     enviando = false; b.textContent = "Confirmar y enviar al depósito";
-    st.ok = true; irA(4);
+    st.ok = true; guardarHist(); irA(4);
   }, function(){
     enviando = false; b.textContent = "Confirmar y enviar al depósito";
     $("estado").textContent = "No se pudo mandar (¿sin señal?). Tocá de nuevo para reintentar.";
   });
 }
+// ---- mis pedidos (se guardan en este celular)
+function leerHist(){ try { return JSON.parse(localStorage.getItem("ped_hist") || "[]"); } catch(_){ return []; } }
+function guardarHist(){
+  var hs = leerHist();
+  hs.unshift({t: Date.now(), cuadrilla: st.cuadrilla, fecha: st.fecha, cant: Object.assign({}, st.cant), items: itemsOk(),
+              recortes: recortesOk().map(function(r){ return {tipo: r.tipo, m: r.m}; }), prueba: MODO_PRUEBA, msg: mensaje()});
+  try { localStorage.setItem("ped_hist", JSON.stringify(hs.slice(0, 30))); } catch(_){}
+}
+function resumenHist(p){
+  var l = todos().filter(function(it){ return p.cant[it.id]; }).map(function(it){ return it.n.replace(/ \(.*\)/, "") + " " + (it.u==="m" ? p.cant[it.id]+" m" : p.cant[it.id]); })
+    .concat(p.items).concat(p.recortes.map(function(r){ return "Recorte " + r.tipo + " " + r.m + " m"; }));
+  return l.length > 4 ? l.slice(0,4).join(" · ") + " · y " + (l.length-4) + " más" : l.join(" · ");
+}
+function pintarHist(){
+  var hs = leerHist();
+  if (!hs.length) { $("hist").innerHTML = '<div class="vacio">Todavía no mandaste pedidos desde este celular.</div>'; return; }
+  $("hist").innerHTML = hs.map(function(p,i){
+    var d = new Date(p.t), f = ["dom","lun","mar","mié","jue","vie","sáb"][d.getDay()]+" "+String(d.getDate()).padStart(2,"0")+"/"+String(d.getMonth()+1).padStart(2,"0")+" "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+    return '<div class="ped"><div class="cab"><b>'+esc(p.cuadrilla)+(p.prueba?'<span class="tagp">Prueba</span>':'')+'</b><span>'+f+'</span></div>'+
+      '<div class="res">'+esc(resumenHist(p))+'</div>'+
+      '<pre class="msg" id="hm-'+i+'" hidden>'+esc(p.msg)+'</pre>'+
+      '<div class="bts"><button data-hver="'+i+'">Ver mensaje</button><button data-hcop="'+i+'">Copiar mensaje</button><button data-hrep="'+i+'">Repetir pedido</button></div></div>';
+  }).join("");
+}
+function repetir(i){
+  var p = leerHist()[i]; if (!p) return;
+  st.cant = Object.assign({}, p.cant); st.items = p.items.slice(); st.recortes = p.recortes.map(function(r){ return {tipo:r.tipo, m:r.m}; });
+  st.fecha = hoyISO(); $("fecha").value = st.fecha; st.ok = false;
+  if (!st.cuadrilla && CUADRILLAS.indexOf(p.cuadrilla) >= 0) { st.cuadrilla = p.cuadrilla; st.proy = GRUPOS_C.filter(function(g){ return g.c.indexOf(p.cuadrilla) >= 0; })[0].n; }
+  irA(2);
+}
+
 function pintarListo(){
   var t = mensaje();
   $("msg").textContent = t;
@@ -362,10 +417,13 @@ function pintarListo(){
 // ---- navegación
 function irA(p){
   if (p===4 && !st.ok) p = 3;
-  if (p>1 && !st.cuadrilla){ p = 1; $("faltaC").hidden = false; }
+  if (p>1 && p<5 && !st.cuadrilla){ p = 1; $("faltaC").hidden = false; }
+  if (p<5) st.volverA = p;
   st.paso = p;
-  [1,2,3,4].forEach(function(i){ $("p"+i).hidden = i!==p; });
-  [1,2,3].forEach(function(i){ $("t"+i).setAttribute("aria-selected", i===Math.min(p,3)); });
+  [1,2,3,4,5].forEach(function(i){ $("p"+i).hidden = i!==p; });
+  [1,2,3].forEach(function(i){ $("t"+i).setAttribute("aria-selected", p<5 && i===Math.min(p,3)); });
+  $("bMis").hidden = p===5;
+  if (p===5) pintarHist();
   if (p===2) pintarMateriales();
   if (p===3) pintarRevision();
   if (p===4) pintarListo();
@@ -411,6 +469,13 @@ document.addEventListener("click", function(e){
   if (b.id==="sig") return irA(st.paso+1);
   if (b.id==="enviar") return enviar();
   if (b.id==="copiar") return copiar();
+  if (b.id==="bMis") return irA(5);
+  if (b.id==="volver") return irA(st.volverA || 1);
+  if (b.dataset.hver){ var pre = $("hm-"+b.dataset.hver); pre.hidden = !pre.hidden; b.textContent = pre.hidden ? "Ver mensaje" : "Ocultar"; return; }
+  if (b.dataset.hrep) return repetir(+b.dataset.hrep);
+  if (b.dataset.hcop){ var tx = leerHist()[+b.dataset.hcop].msg;
+    try { navigator.clipboard.writeText(tx).then(function(){ b.textContent = "Copiado ✓"; }, function(){ $("hm-"+b.dataset.hcop).hidden = false; }); } catch(_){ $("hm-"+b.dataset.hcop).hidden = false; }
+    return; }
   if (b.id==="nuevo"){ st.cant={}; st.items=[]; st.recortes=[]; st.ok=false; st.fecha=hoyISO(); $("fecha").value=st.fecha; irA(2); return; }
 });
 document.addEventListener("change", function(e){
